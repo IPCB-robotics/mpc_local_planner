@@ -12,7 +12,7 @@
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
+ *  GNU General Public License for more details.a
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
@@ -37,8 +37,10 @@
 #include <mpc_local_planner/optimal_control/min_time_via_points_cost.h>
 #include <mpc_local_planner/optimal_control/quadratic_cost_se2.h>
 #include <mpc_local_planner/optimal_control/stage_inequality_se2.h>
+
 #include <mpc_local_planner/systems/kinematic_bicycle_model.h>
 #include <mpc_local_planner/systems/simple_car.h>
+#include <mpc_local_planner/systems/omni_robot.h>
 #include <mpc_local_planner/systems/unicycle_robot.h>
 #include <mpc_local_planner/utils/time_series_se2.h>
 
@@ -361,6 +363,22 @@ RobotDynamicsInterface::Ptr Controller::configureRobotDynamics(const ros::NodeHa
         else
             return std::make_shared<SimpleCarModel>(wheelbase);
     }
+
+    else if (_robot_type == "omni_robot")
+    {
+        double lx = 0.5;
+        nh.param("robot/omni_robot/lenght_x", lx, lx);
+
+        double ly = 0.5;
+        nh.param("robot/omni_robot/lenght_y", ly, ly);
+
+        double r = 0.1;
+        nh.param("robot/omni_robot/wheelradius", r, r);
+        
+        return std::make_shared<OmniRobot>(lx, ly, r);
+  
+    }
+
     else if (_robot_type == "kinematic_bicycle_vel_input")
     {
         double length_rear = 1.0;
@@ -526,6 +544,24 @@ corbo::StructuredOptimalControlProblem::Ptr Controller::configureOcp(const ros::
 
         ocp->setControlBounds(Eigen::Vector2d(-max_vel_x_backwards, -max_steering_angle), Eigen::Vector2d(max_vel_x, max_steering_angle));
     }
+
+    else if (_robot_type == "omni_robot")
+    {
+        double max_vel_x = 0.4;
+        nh.param("robot/omni_robot/max_vel_x", max_vel_x, max_vel_x);
+        double max_vel_x_backwards = 0.2;
+        nh.param("robot/omni_robot/max_vel_x_backwards", max_vel_x_backwards, max_vel_x_backwards);
+        if (max_vel_x_backwards < 0)
+        {
+            ROS_WARN("max_vel_x_backwards must be >= 0");
+            max_vel_x_backwards *= -1;
+        }
+        double max_steering_angle = 1.5;
+        nh.param("robot/omni_robot/max_steering_angle", max_steering_angle, max_steering_angle);
+
+        ocp->setControlBounds(Eigen::Vector2d(-max_vel_x_backwards, -max_steering_angle), Eigen::Vector2d(max_vel_x, max_steering_angle));
+    }   
+
     else if (_robot_type == "kinematic_bicycle_vel_input")
     {
         double max_vel_x = 0.4;
@@ -537,7 +573,7 @@ corbo::StructuredOptimalControlProblem::Ptr Controller::configureOcp(const ros::
             ROS_WARN("max_vel_x_backwards must be >= 0");
             max_vel_x_backwards *= -1;
         }
-        double max_steering_angle = 1.5;
+        double max_steering_angle = 0.0;
         nh.param("robot/kinematic_bicycle_vel_input/max_steering_angle", max_steering_angle, max_steering_angle);
 
         ocp->setControlBounds(Eigen::Vector2d(-max_vel_x_backwards, -max_steering_angle), Eigen::Vector2d(max_vel_x, max_steering_angle));
@@ -772,6 +808,29 @@ corbo::StructuredOptimalControlProblem::Ptr Controller::configureOcp(const ros::
         Eigen::Vector2d ud_ub(acc_lim_x, max_steering_rate);
         _inequality_constraint->setControlDeviationBounds(ud_lb, ud_ub);
     }
+
+    else if (_robot_type == "omni_robot")
+    {
+        double acc_lim_x = 0.0;
+        nh.param("robot/omni_robot/acc_lim_x", acc_lim_x, acc_lim_x);
+        double dec_lim_x = 0.0;
+        nh.param("robot/omni_robot/dec_lim_x", dec_lim_x, dec_lim_x);
+        if (dec_lim_x < 0)
+        {
+            ROS_WARN("dec_lim_x must be >= 0");
+            dec_lim_x *= -1;
+        }
+        double max_steering_rate = 0.0;
+        nh.param("robot/omni_robot/max_steering_rate", max_steering_rate, max_steering_rate);
+
+        if (acc_lim_x <= 0) acc_lim_x = corbo::CORBO_INF_DBL;
+        if (dec_lim_x <= 0) dec_lim_x = corbo::CORBO_INF_DBL;
+        if (max_steering_rate <= 0) max_steering_rate = corbo::CORBO_INF_DBL;
+        Eigen::Vector2d ud_lb(-dec_lim_x, -max_steering_rate);
+        Eigen::Vector2d ud_ub(acc_lim_x, max_steering_rate);
+        _inequality_constraint->setControlDeviationBounds(ud_lb, ud_ub);
+    }
+
     else if (_robot_type == "kinematic_bicycle_vel_input")
     {
         double acc_lim_x = 0.0;
