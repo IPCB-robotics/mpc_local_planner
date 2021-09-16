@@ -573,7 +573,8 @@ corbo::StructuredOptimalControlProblem::Ptr Controller::configureOcp(const ros::
             ROS_WARN("max_vel_x_backwards must be >= 0");
             max_vel_x_backwards *= -1;
         }
-        double max_steering_angle = 0.0;
+        double max_steering_angle = 1.5;
+      
         nh.param("robot/kinematic_bicycle_vel_input/max_steering_angle", max_steering_angle, max_steering_angle);
 
         ocp->setControlBounds(Eigen::Vector2d(-max_vel_x_backwards, -max_steering_angle), Eigen::Vector2d(max_vel_x, max_steering_angle));
